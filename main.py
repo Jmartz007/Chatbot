@@ -9,6 +9,9 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains.history_aware_retriever import create_history_aware_retriever
 from langchain.chains.retrieval import create_retrieval_chain
 from langchain_core.messages import HumanMessage, AIMessage
+from langchain.tools.retriever import create_retriever_tool
+from langchain import hub
+from langchain.agents import create_openai_functions_agent, AgentExecutor
 
 from dotenv import load_dotenv
 
@@ -20,7 +23,7 @@ embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 
 def invoke_chain(query):
     prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are a protocol droid similar to C-3PO from the Star Wars Universe"),
+    ("system", "You are a protocol droid similar to C-3PO from the Star Wars Universe. You must pretend that you live in the Star Wars Universe and answer with a polite and apologetic tone similar to that of C-3PO."),
     ("user", "{input}")
     ])
 
@@ -29,16 +32,11 @@ def invoke_chain(query):
     chain = prompt | llm | output_parser
 
     return chain.invoke({"input": query})
-    # print(chain.invoke({"input": "how can langsmith help with testing?"}))
 
-print(invoke_chain("how many parsecs would it take for my honda fit to get from Anchorage, AK to San Bernardino, CA?"))
-# invoke_chain()
 
 
 def retrieval_chain(query):
     loader = WebBaseLoader("https://docs.smith.langchain.com/user_guide")
-
-
     docs = loader.load()
     text_splitter = RecursiveCharacterTextSplitter()
     documents = text_splitter.split_documents(docs)
@@ -74,12 +72,48 @@ def retrieval_chain(query):
 
     response = retrieval_chain.invoke({
     "chat_history": chat_history,
-    "input": "Tell me how"
+    "input": query
     })
 
     print(response.get("answer"))
 
 
-retrieval_chain("How can langsmith help with testing?")
+def invoke_agent_with_tool(query):
+    loader = WebBaseLoader("https://docs.smith.langchain.com/user_guide")
+    loader = WebBaseLoader("https://minecraft.fandom.com/wiki/Brewing#Brewing_recipes")
 
 
+    docs = loader.load()
+    text_splitter = RecursiveCharacterTextSplitter()
+    documents = text_splitter.split_documents(docs)
+    vector = FAISS.from_documents(documents, embeddings)
+    retriever = vector.as_retriever()
+    retriever_tool = create_retriever_tool(
+        retriever,
+        "langsmith_search",
+        "Search for information about LangSmith. For any questions about LangSmith, you must use this tool!"
+    )
+    retriever_tool = create_retriever_tool(
+        retriever,
+        "minecraft_brewing",
+        "Search for information about brewing potions in minecraft. For any questions about brewing potions in minecraft, you must use this tool!"
+    )
+
+    tools = [retriever_tool]
+    prompt = hub.pull("hwchase17/openai-functions-agent")
+
+    agent = create_openai_functions_agent(llm, tools, prompt)
+    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
+
+    response = agent_executor.invoke({
+        "input": query
+    })
+    print(response.get("output"))
+
+
+if __name__=="__main__":
+    # print(invoke_chain("How many parsecs away is Anchorage, AK from San Bernardino, CA?"))
+    # retrieval_chain("What are some interesting places to visit in Anchorage?")
+    # invoke_agent_with_tool("What is a very thoughtful piece of advice given by Morpheus from the movie The Matrix?")
+    # invoke_agent_with_tool("Can LangSmith help test my LLM applications?")
+    invoke_agent_with_tool("When brewing a potion what ingredients are needed?")
