@@ -13,12 +13,17 @@ from langchain.tools.retriever import create_retriever_tool
 from langchain import hub
 from langchain.agents import create_openai_functions_agent, AgentExecutor
 
+from langsmith.wrappers import wrap_openai
+from langsmith import traceable, Client
+
 from dotenv import load_dotenv
 
 load_dotenv()
+
+client = Client()
+
 llm = ChatOpenAI(model="gpt-3.5-turbo-0125")
 embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-
 
 
 def invoke_chain(query):
@@ -32,7 +37,6 @@ def invoke_chain(query):
     chain = prompt | llm | output_parser
 
     return chain.invoke({"input": query})
-
 
 
 def retrieval_chain(query):
@@ -78,7 +82,7 @@ def retrieval_chain(query):
     print(response.get("answer"))
 
 
-def invoke_agent_with_tool(query):
+def agent_with_tool():
     loader = WebBaseLoader("https://docs.smith.langchain.com/user_guide")
     loader = WebBaseLoader("https://minecraft.fandom.com/wiki/Brewing#Brewing_recipes")
 
@@ -105,10 +109,14 @@ def invoke_agent_with_tool(query):
     agent = create_openai_functions_agent(llm, tools, prompt)
     agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
 
+    return agent_executor
+
     response = agent_executor.invoke({
         "input": query
     })
     print(response.get("output"))
+
+
 
 
 if __name__=="__main__":
@@ -116,4 +124,13 @@ if __name__=="__main__":
     # retrieval_chain("What are some interesting places to visit in Anchorage?")
     # invoke_agent_with_tool("What is a very thoughtful piece of advice given by Morpheus from the movie The Matrix?")
     # invoke_agent_with_tool("Can LangSmith help test my LLM applications?")
-    invoke_agent_with_tool("When brewing a potion what ingredients are needed?")
+    # invoke_agent_with_tool("When brewing a potion what ingredients are needed?")
+    inputs = [
+        "What's a starting ingredient to make a potion?",
+        "What ingredients do you need to make a night vision potion"
+    ]
+
+    response = agent_with_tool().batch([{"input": x} for x in inputs])
+    print(response)
+    for resp in response:
+        print(resp['output'])

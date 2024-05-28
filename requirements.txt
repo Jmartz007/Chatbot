@@ -5,3 +5,5 @@ langchain-community
 beautifulsoup4
 faiss-cpu
 langchainhub
+langsmith
+langgraph
